@@ -4,7 +4,7 @@ Structured challenge-wise writeups grouped by category.
 
 ## Included Source
 
-- [`Writeups.txt`](./Writeups.txt) (kept at this level as requested)
+- [`Writeups.txt`](./Writeups.txt) (ALL WRITEUP IS MERGED IN THIS ONE)
 
 ## Category Overview
 
