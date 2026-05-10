@@ -1,25 +1,21 @@
-# Writeup
+# Writeup Collection
 
-Category-wise organized CTF writeups with challenge-wise files and master index.
+This repository contains my CTF and challenge writeups.
 
-## Main Collection
+## Break The Syntax
 
-- [`LPU-CYBERWAR-2K26`](./LPU-CYBERWAR-2K26/README.md)
+All writeups for this set are in the `Break The Syntax/` folder.
 
-## Quick Navigation
+### Included Writeups
 
-- [`Master Index`](./LPU-CYBERWAR-2K26/INDEX.md)
-- [`Raw Source Notes (Writeups.txt)`](./LPU-CYBERWAR-2K26/Writeups.txt)
+- `Shellcode: 1.11 You Can (Not) Execute.md`
+- `Stepping Stones.md`
+- `fcp.md`
+- `flagchecker.md`
+- `myfirstflag.md`
+- `pokecollector.md`
+- `ponibarn.md`
 
-## Category Folders
+## Acknowledgement
 
-- [web](./LPU-CYBERWAR-2K26/web/README.md)
-- [forensics](./LPU-CYBERWAR-2K26/forensics/README.md)
-- [cloud](./LPU-CYBERWAR-2K26/cloud/README.md)
-- [mobile](./LPU-CYBERWAR-2K26/mobile/README.md)
-- [pwn](./LPU-CYBERWAR-2K26/pwn/README.md)
-- [binary](./LPU-CYBERWAR-2K26/binary/README.md)
-- [crypto](./LPU-CYBERWAR-2K26/crypto/README.md)
-- [osint](./LPU-CYBERWAR-2K26/osint/README.md)
-- [network](./LPU-CYBERWAR-2K26/network/README.md)
-- [misc](./LPU-CYBERWAR-2K26/misc/README.md)
+These writeups are solved and documented by **parth0xu**.
