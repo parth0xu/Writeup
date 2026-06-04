@@ -31,11 +31,11 @@
 
 ### Event — Hacker's Gambit 2025
 
-![Event Photo](event.png)
+![Event Photo](1.png)
 
 ### Certificate & Trophy
 
-![Certificate and Trophy](certificate.png)
+![Certificate and Trophy](2.png)
 
 ---
 
