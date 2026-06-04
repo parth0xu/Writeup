@@ -66,23 +66,23 @@ The CTF covered a broad range of security domains:
 
 **Entry Badge**
 
-![Entry Badge](./badge.jpg)
+![Entry Badge](badge.jpeg)
 
 **Live Scoreboard (2nd Place — Team DOSA)**
 
-![Scoreboard](./scoreboard.jpg)
+![Scoreboard](scorecard.jpeg)
 
 **CTF Competition Room — IIT Delhi**
 
-![CTF Room](./ctf-room.jpg)
+![CTF Room](ctf-room.jpeg)
 
 **Participants Group Photo**
 
-![Group Photo](./group-photo.jpg)
+![Group Photo](group-photo.jpeg)
 
 **IIT Delhi Campus**
 
-![IIT Delhi](./iit-delhi.jpg)
+![IIT Delhi](iit-delhi.jpeg)
 
 ---
 
